@@ -3,18 +3,23 @@ import torch
 import os
 from transformers import pipeline, AutoTokenizer
 
-# Get MODEL_NAME from environment (set by RunPod) or use default
+# Point to where RunPod mounts models
+os.environ['HF_HOME'] = '/runpod-volume/huggingface-cache'
+os.environ['TRANSFORMERS_CACHE'] = '/runpod-volume/huggingface-cache'
+os.environ['HF_HUB_CACHE'] = '/runpod-volume/huggingface-cache/hub'
+
 MODEL_NAME = os.environ.get('MODEL_NAME', 'microsoft/Phi-3-mini-4k-instruct')
 
 print(f"Loading model: {MODEL_NAME}")
+print(f"Cache location: {os.environ['HF_HOME']}")
 
-# Load tokenizer
+# TEST MODE: Force local files only - will fail if model not cached
 tokenizer = AutoTokenizer.from_pretrained(
     MODEL_NAME,
-    trust_remote_code=True
+    trust_remote_code=True,
+    local_files_only=True  # ← TESTING: Fails if not cached
 )
 
-# Load model
 pipe = pipeline(
     "text-generation",
     model=MODEL_NAME,
@@ -24,10 +29,9 @@ pipe = pipeline(
     trust_remote_code=True
 )
 
-print("Model loaded!")
+print("✓ Model loaded from cache successfully!")
 
 def handler(job):
-    """RunPod serverless handler"""
     job_input = job["input"]
     prompt = job_input.get("prompt", "Hello!")
     max_tokens = job_input.get("max_tokens", 256)
@@ -40,6 +44,9 @@ def handler(job):
         temperature=temperature
     )
     
+    return {"output": output[0]["generated_text"]}
+
+runpod.serverless.start({"handler": handler})
     return {"output": output[0]["generated_text"]}
 
 runpod.serverless.start({"handler": handler})
